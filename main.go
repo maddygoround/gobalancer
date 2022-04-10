@@ -186,7 +186,7 @@ func main() {
 	var serverList string
 	var port int
 	flag.StringVar(&serverList, "backends", "", "Load balanced backends, use commas to separate")
-	flag.IntVar(&port, "port", 3030, "Port to serve")
+	flag.IntVar(&port, "port", 3031, "Port to serve")
 	flag.Parse()
 	// Create a new consistent instance
 	cfg := consistent.Config{
