@@ -32,8 +32,10 @@ type Service struct {
 	} `yaml:"rule"`
 }
 
+type integer int
+
 const (
-	Attempts int = iota
+	Attempts integer = iota
 	Retry
 )
 
@@ -54,6 +56,7 @@ type Strategy struct {
 	name string
 	key  string
 }
+
 type ServerPool struct {
 	Backends []*Backend
 	Current  int
@@ -199,7 +202,7 @@ func (s *ServerPool) GetNextPeer(r *http.Request) *Backend {
 var serverpool ServerPool
 
 func main() {
-	var servers = make([]string, 2)
+	servers := make(map[int]string)
 	filename, _ := filepath.Abs("./gobalancer.yml")
 	yamlFile, err := ioutil.ReadFile(filename)
 
