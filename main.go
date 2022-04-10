@@ -2,20 +2,35 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
+	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/buraksezer/consistent"
 	"github.com/cespare/xxhash"
+	"gopkg.in/yaml.v2"
 )
+
+type Service struct {
+	Port     int `yaml:"port"`
+	Backends []struct {
+		Type string `yaml:"type"`
+		Port int    `yaml:"port"`
+		Host string `yaml:"host"`
+	} `yaml:"backends"`
+	Rule struct {
+		Type string `yaml:"type"`
+		Key  string `yaml:"key"`
+	} `yaml:"rule"`
+}
 
 const (
 	Attempts int = iota
@@ -37,6 +52,7 @@ type Backend struct {
 
 type Strategy struct {
 	name string
+	key  string
 }
 type ServerPool struct {
 	Backends []*Backend
@@ -69,9 +85,9 @@ func (s *ServerPool) getKey(httpReq *http.Request) (string, error) {
 	case SourceIP:
 		hashKey = httpReq.Host
 	case HTTPHeader:
-		hashKey = httpReq.Header.Get("x-hash-key")
+		hashKey = httpReq.Header.Get(s.Strategy.key)
 	case QueryParam:
-		hashKey = httpReq.URL.Query().Get("key")
+		hashKey = httpReq.URL.Query().Get(s.Strategy.key)
 	default:
 		return "", fmt.Errorf("can't find ConsistentHash fields")
 	}
@@ -183,11 +199,27 @@ func (s *ServerPool) GetNextPeer(r *http.Request) *Backend {
 var serverpool ServerPool
 
 func main() {
-	var serverList string
-	var port int
-	flag.StringVar(&serverList, "backends", "", "Load balanced backends, use commas to separate")
-	flag.IntVar(&port, "port", 3031, "Port to serve")
-	flag.Parse()
+	var servers = make([]string, 2)
+	filename, _ := filepath.Abs("./gobalancer.yml")
+	yamlFile, err := ioutil.ReadFile(filename)
+
+	if err != nil {
+		panic(err)
+	}
+
+	var config Service
+
+	err = yaml.Unmarshal(yamlFile, &config)
+	log.Println(config)
+	if err != nil {
+		log.Println(err.Error())
+	}
+	for index, server := range config.Backends {
+		servers[index] = server.Type + "://" + server.Host + ":" + strconv.Itoa(server.Port)
+	}
+
+	port := config.Port
+
 	// Create a new consistent instance
 	cfg := consistent.Config{
 		PartitionCount:    100,
@@ -198,12 +230,11 @@ func main() {
 
 	c := consistent.New(nil, cfg)
 
-	if len(serverList) == 0 {
+	if len(servers) == 0 {
 		log.Fatal("Please provide atleast one server")
 	}
 
-	tokens := strings.Split(serverList, ",")
-	for _, tok := range tokens {
+	for _, tok := range servers {
 		serverUrl, err := url.Parse(tok)
 		node := member(serverUrl.String())
 		c.Add(node)
@@ -242,8 +273,8 @@ func main() {
 	}
 
 	serverpool.HR = c
-	serverpool.Strategy.name = "query"
-
+	serverpool.Strategy.name = config.Rule.Type
+	serverpool.Strategy.key = config.Rule.Key
 	server := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: http.HandlerFunc(lb),

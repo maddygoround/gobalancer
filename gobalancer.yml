@@ -1,0 +1,11 @@
+backends:
+  - type: http
+    port: 3032
+    host: localhost
+  - type: http
+    port: 3030
+    host: localhost
+rule:
+    type: query
+    key: key
+port: 3031
