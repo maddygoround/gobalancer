@@ -198,6 +198,23 @@ func (s *ServerPool) GetNextPeer(r *http.Request) *Backend {
 		}
 	}
 
+	nearByNodes, _ := s.HR.GetClosestN([]byte(key), len(s.Backends))
+
+	var nextOwner consistent.Member
+	for _, node := range nearByNodes {
+		if owner.String() != node.String() {
+			nextOwner = node
+		}
+	}
+
+	for _, backend := range s.Backends {
+		if backend.URL.String() == nextOwner.String() {
+			if backend.Alive {
+				return backend
+			}
+		}
+	}
+
 	return nil
 }
 
