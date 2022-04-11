@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -202,26 +204,37 @@ func (s *ServerPool) GetNextPeer(r *http.Request) *Backend {
 var serverpool ServerPool
 
 func main() {
-	servers := make(map[int]string)
-	filename, _ := filepath.Abs("./gobalancer.yml")
-	yamlFile, err := ioutil.ReadFile(filename)
-
-	if err != nil {
-		panic(err)
-	}
+	var serverlist string
+	var port int
+	flag.StringVar(&serverlist, "backends", "", "List of backends")
+	flag.IntVar(&port, "port", 3031, "loadbalancer port")
 
 	var config Service
+	servers := make(map[int]string)
+	if len(serverlist) == 0 {
+		filename, _ := filepath.Abs("./gobalancer.yml")
+		yamlFile, err := ioutil.ReadFile(filename)
 
-	err = yaml.Unmarshal(yamlFile, &config)
-	log.Println(config)
-	if err != nil {
-		log.Println(err.Error())
-	}
-	for index, server := range config.Backends {
-		servers[index] = server.Type + "://" + server.Host + ":" + strconv.Itoa(server.Port)
-	}
+		if err != nil {
+			panic(err)
+		}
 
-	port := config.Port
+		err = yaml.Unmarshal(yamlFile, &config)
+		log.Println(config)
+		if err != nil {
+			log.Println(err.Error())
+		}
+		for index, server := range config.Backends {
+			servers[index] = server.Type + "://" + server.Host + ":" + strconv.Itoa(server.Port)
+		}
+		port = config.Port
+	} else {
+		tokens := strings.Split(serverlist, ",")
+
+		for index, token := range tokens {
+			servers[index] = token
+		}
+	}
 
 	// Create a new consistent instance
 	cfg := consistent.Config{
@@ -276,8 +289,14 @@ func main() {
 	}
 
 	serverpool.HR = c
-	serverpool.Strategy.name = config.Rule.Type
-	serverpool.Strategy.key = config.Rule.Key
+	serverpool.Strategy.name = "query"
+	serverpool.Strategy.key = "key"
+
+	if config.Backends != nil {
+		serverpool.Strategy.name = config.Rule.Type
+		serverpool.Strategy.key = config.Rule.Key
+	}
+
 	server := http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: http.HandlerFunc(lb),
