@@ -1,11 +1,11 @@
 backends:
-  - type: http
-    port: 3032
-    host: localhost
-  - type: http
-    port: 3030
-    host: localhost
+  - type: https
+    port: 443
+    host: api.dictionaryapi.dev
+  - type: https
+    port: 443
+    host: api.dictionaryapi.dev
 rule:
     type: query
     key: key
-port: 3031
+port: 3035

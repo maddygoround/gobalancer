@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -105,6 +106,9 @@ func lb(w http.ResponseWriter, r *http.Request) {
 
 	if peer != nil {
 		w.Header().Add("origin", peer.URL.Host)
+		r.URL.Host = peer.URL.Host
+		r.URL.Scheme = peer.URL.Scheme
+		r.Header.Set("X-Forwarded-Host", r.Header.Get("Host"))
 		peer.ReverseProxy.ServeHTTP(w, r)
 		return
 	}
@@ -277,6 +281,25 @@ func main() {
 		}
 
 		proxy := httputil.NewSingleHostReverseProxy(serverUrl)
+
+		var xDefaultTransport http.RoundTripper = &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true, // test server certificate is not trusted.
+			},
+		}
+
+		proxy.Transport = xDefaultTransport
+
 		proxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, e error) {
 			log.Printf("[%s] %s\n", serverUrl.Host, e.Error())
 			retries := GetRetryFromContext(request)
