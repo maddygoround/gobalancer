@@ -208,7 +208,7 @@ func main() {
 	var port int
 	flag.StringVar(&serverlist, "backends", "", "List of backends")
 	flag.IntVar(&port, "port", 3031, "loadbalancer port")
-
+	flag.Parse()
 	var config Service
 	servers := make(map[int]string)
 	if len(serverlist) == 0 {
